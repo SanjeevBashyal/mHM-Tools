@@ -2618,6 +2618,25 @@ def _native_restart_indexers(data_array, dataset, lon_min, lat_max):
     return indexers
 
 
+def _native_restart_valid_mask(data_array):
+    """Return a boolean array of which cells in a tile array hold real data.
+
+    Returns ``None`` when validity can't be determined for this variable's
+    convention, meaning the caller should fall back to a blind overwrite.
+    """
+    if np.issubdtype(data_array.dtype, np.floating):
+        # get_xarray_ds_from_file loads with mask_and_scale=True (default), so
+        # any declared _FillValue/missing_value is already decoded to NaN here
+        # regardless of the on-disk sentinel.
+        return ~np.isnan(data_array.data)
+    if data_array.name in ("L1_domain_mask", "L0_domain_mask"):
+        # Native domain-mask variables are plain int 0/1 with no declared
+        # _FillValue, so they aren't auto-NaN'd above. 0/inactive matches the
+        # "mask_regridded == 1" convention used elsewhere in this file.
+        return np.asarray(data_array.data) != 0
+    return None
+
+
 def _merge_native_restart_files(restart_file_paths, lon_min, lon_max, lat_min, lat_max):
     """Stitch tile restart files on their native mHM restart dimensions."""
     logger.info("Stitching restart files with native mHM restart dimensions")
@@ -2659,7 +2678,15 @@ def _merge_native_restart_files(restart_file_paths, lon_min, lon_max, lat_min, l
                 )
                 with ErrorLogger(logger):
                     raise ValueError(msg)
-            merged[data_var][indexers] = data_array.data
+            # Combine rather than blindly overwrite: when multiple continent
+            # runs select overlapping tiles at a shared border, a later file's
+            # invalid/fill cells must not wipe out an earlier file's valid
+            # cells at the same position (see _native_restart_valid_mask).
+            valid = _native_restart_valid_mask(data_array)
+            if valid is None:
+                merged[data_var][indexers] = data_array.data
+            else:
+                merged[data_var][indexers] = np.where(valid, data_array.data, target.data)
 
     if "L1_domain_mask" in merged:
         mask = np.asarray(merged["L1_domain_mask"].values)

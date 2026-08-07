@@ -1635,6 +1635,65 @@ def test_merge_restart_files_writes_cf_lat_lon_without_flipping_native_rows(
     assert merged.attrs["coordinates"] == "lat_bnds lon_bnds"
 
 
+def test_merge_restart_files_preserves_valid_cells_across_overlapping_tiles(tmp_path):
+    """Two "continent" runs can both select the same border tile.
+
+    Each restart file only has real values for the cells it owns (its own
+    tile mask already applied upstream) and NaN elsewhere in that same tile
+    box. The later-sorted file's NaN cells must not wipe out the
+    earlier-sorted file's valid cells at the same position - regression test
+    for the border-clobbering bug in _merge_native_restart_files.
+    """
+    first_file = tmp_path / "000_mask_a" / "slice_0_0" / "output" / "mHM_restart_001.nc"
+    second_file = tmp_path / "001_mask_b" / "slice_0_0" / "output" / "mHM_restart_001.nc"
+    first_file.parent.mkdir(parents=True)
+    second_file.parent.mkdir(parents=True)
+    output_file = tmp_path / "merged.nc"
+
+    attrs = {
+        "xllcorner_L1": 0.0,
+        "yllcorner_L1": 0.0,
+        "cellsize_L1": 1.0,
+        "ncols_L1": 2,
+        "nrows_L1": 2,
+    }
+    first = xr.Dataset(
+        data_vars={
+            "L1_fAsp": (
+                ("ncols1", "nrows1"),
+                np.array([[1.0, np.nan], [3.0, 4.0]]),
+            ),
+        },
+        attrs=dict(attrs),
+    )
+    second = xr.Dataset(
+        data_vars={
+            "L1_fAsp": (
+                ("ncols1", "nrows1"),
+                np.array([[np.nan, 20.0], [np.nan, np.nan]]),
+            ),
+        },
+        attrs=dict(attrs),
+    )
+    first.to_netcdf(first_file)
+    second.to_netcdf(second_file)
+
+    merged = _merge_restart_files(
+        restart_file_paths=[first_file, second_file],
+        lon_min=0.0,
+        lon_max=2.0,
+        lat_min=0.0,
+        lat_max=2.0,
+        l1_resolution=1.0,
+        output_file=output_file,
+    )
+
+    np.testing.assert_array_equal(
+        merged["L1_fAsp"].values,
+        np.array([[1.0, 20.0], [3.0, 4.0]]),
+    )
+
+
 def test_merge_restart_files_writes_merged_tile_mask(tmp_path):
     west_file = tmp_path / "slice_0_0" / "output" / "mHM_restart_001.nc"
     east_file = tmp_path / "slice_1_0" / "output" / "mHM_restart_001.nc"
