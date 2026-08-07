@@ -256,6 +256,14 @@ def _write_tile_mask_section(tile, mask_ds, mask_var, fname="mask_tile.nc"):
     return output_file
 
 
+def _ensure_tile_mask_section(tile, mask_ds, mask_var, fname="mask_tile.nc"):
+    """Write the tile mask section if it is not already present in the tile folder."""
+    mask_file = Path(tile.output_path) / fname
+    if mask_file.is_file():
+        return mask_file
+    return _write_tile_mask_section(tile, mask_ds, mask_var, fname=fname)
+
+
 def _meteo_fill_nearest_files(setup_path):
     """Return NetCDF meteo files that should be filled before mHM runs."""
     meteo_paths = sorted(d for d in Path(setup_path).rglob("meteo") if d.is_dir())
@@ -1803,8 +1811,21 @@ def _prepare_tiles_for_mhm(  # noqa: PLR0913
             raise_on_missing=False,
         )
         if not missing_tiles:
+            for tile in tiles:
+                _ensure_tile_mask_section(tile, mask_ds, mask_var)
             return tiles
         logger.info(f"Preparing {len(missing_tiles)} missing tile setups before reuse.")
+        missing_output_paths = {tile.output_path for tile in missing_tiles}
+        existing_tiles = [
+            tile for tile in tiles if tile.output_path not in missing_output_paths
+        ]
+        if existing_tiles:
+            logger.info(
+                f"Ensuring tile mask sections for {len(existing_tiles)} existing "
+                "tile setups without recreating them."
+            )
+            for tile in existing_tiles:
+                _ensure_tile_mask_section(tile, mask_ds, mask_var)
     else:
         missing_tiles = tiles
     if int(n_jobs) == 1:
