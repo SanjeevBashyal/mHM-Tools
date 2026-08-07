@@ -3093,6 +3093,10 @@ def _convert_native_restart_to_cf(
         final["L1_fAsp"] = (("lat", "lon"), np.ones(active_mask.shape, dtype=float))
     if "L1_degDay" not in final:
         final["L1_degDay"] = (("lat", "lon"), np.ones(active_mask.shape, dtype=float))
+    if {"L1_wiltingPoint", "L1_soilMoistFC"} <= set(final.data_vars):
+        final["L1_soilMoist"] = final["L1_wiltingPoint"] + (
+            final["L1_soilMoistFC"] - final["L1_wiltingPoint"]
+        ) / 2
     final = _mask_final_spatial_vars(final, active_mask)
     return _apply_final_attrs(
         final,
