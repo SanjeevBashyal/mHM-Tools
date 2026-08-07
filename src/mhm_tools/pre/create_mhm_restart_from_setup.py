@@ -2927,6 +2927,11 @@ def _apply_final_attrs(ds, lon_min, lat_min, resolution, n_cells):
     n_lat = ds.sizes["lat"]
     xll = int(lon_min) if lon_min == int(lon_min) else float(lon_min)
     yll = int(lat_min) if lat_min == int(lat_min) else float(lat_min)
+    # The L0_domain_* variables are written as L1-sized placeholders (the
+    # native L0 grid is not stitched), so these attrs must mirror the L1
+    # grid too: mHM's restart reader uses nrows_L0/ncols_L0 to allocate the
+    # array it reads L0_domain_mask into, so any mismatch (or a value too
+    # large for its 32-bit integer) breaks restart loading.
     ds.attrs.update(
         {
             "xllcorner_L1": xll,
