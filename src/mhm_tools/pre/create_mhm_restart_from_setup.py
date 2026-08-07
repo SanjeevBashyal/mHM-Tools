@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import netCDF4
 import numpy as np
 import xarray as xr
 from joblib import Parallel, delayed
@@ -1344,6 +1345,114 @@ def _mask_restart_tile_with_tile_mask(dataset, restart_file, mask_var):
     return dataset
 
 
+def _load_l1_restart_subset(restart_file):
+    """Open a restart file lazily and load only its L1-dimensioned variables.
+
+    A tile restart file also carries much larger native L0 (and possibly L11)
+    grids that masking never touches. Reading raw (``mask_and_scale=False``)
+    keeps ``_FillValue``/missing-value markers exactly as stored on disk, since
+    values are written back below with plain ``netCDF4`` (no CF re-encoding).
+    """
+    restart_file = Path(restart_file)
+    with xr.open_dataset(
+        restart_file, engine="netcdf4", mask_and_scale=False, decode_times=False
+    ) as lazy_ds:
+        transformed = _add_restart_spatial_coords(lazy_ds)
+        if "lon" not in transformed.coords or "lat" not in transformed.coords:
+            return None
+        l1_vars = [
+            var
+            for var in transformed.data_vars
+            if "lon" in transformed[var].dims and "lat" in transformed[var].dims
+        ]
+        if not l1_vars:
+            return None
+        # Selecting only the L1 variables and loading that subset keeps large
+        # L0/L11 arrays untouched on disk; their bytes are never read.
+        return transformed[l1_vars].load()
+
+
+def _mask_l1_restart_subset(subset, tile_mask_ds, mask_var):
+    """Return ``{var_name: masked ndarray}`` for L1 variables in native order."""
+    mask_da = _get_mask_data_array(tile_mask_ds, mask_var)
+    if mask_da is None:
+        return {}
+    if mask_da.name is None:
+        mask_da = mask_da.rename(mask_var)
+    mask_input = mask_da.to_dataset(name=mask_da.name)
+    mask_lon_key = get_coord_key(mask_da, lon=True)
+    mask_lat_key = get_coord_key(mask_da, lat=True)
+    mask_regridded = regrid_mask(
+        mask_ds=mask_input,
+        lon_key_mask=mask_lon_key,
+        lat_key_mask=mask_lat_key,
+        target_lon=subset["lon"],
+        target_lat=subset["lat"],
+        mask_key=mask_da.name,
+        lon_key_target="lon",
+        lat_key_target="lat",
+    )
+    active = mask_regridded == 1
+
+    masked_arrays = {}
+    for var in subset.data_vars:
+        data_array = subset[var]
+        fill_value = _fill_value_for_restart_var(data_array)
+        masked = data_array.where(active, fill_value).transpose(*data_array.dims)
+        masked_arrays[var] = np.asarray(masked.values, dtype=data_array.dtype)
+    return masked_arrays
+
+
+def _write_restart_vars_in_place(restart_file, masked_arrays):
+    """Overwrite only the given variables' bytes; all other data stays untouched."""
+    if not masked_arrays:
+        return
+    restart_file = Path(restart_file)
+    with netCDF4.Dataset(restart_file, "r+") as nc:
+        for name, array in masked_arrays.items():
+            nc.variables[name][:] = array
+
+
+def _mask_restart_file_in_place(restart_file, mask_var):
+    """Mask one tile restart file with its own tile mask before it is relocated."""
+    restart_file = Path(restart_file)
+    tile_mask = _load_tile_mask_for_restart(restart_file)
+    if tile_mask is None:
+        return None
+    subset = _load_l1_restart_subset(restart_file)
+    if subset is None:
+        return None
+    masked_arrays = _mask_l1_restart_subset(subset, tile_mask, mask_var)
+    if not masked_arrays:
+        return None
+    _write_restart_vars_in_place(restart_file, masked_arrays)
+    logger.info(
+        f"Masked restart file {restart_file} in place using its tile mask "
+        f"for variables {list(masked_arrays)}."
+    )
+    return restart_file
+
+
+def _mask_restart_files_in_place(restart_files, mask_var, n_jobs=1):
+    """Mask tile restart files in place before they are moved, copied, or merged.
+
+    Uses process-based parallelism ("loky"), not threads: the netCDF4/HDF5 C
+    library is not reliably thread-safe (concurrent reads/writes across OS
+    threads in one process can corrupt its internal state and crash), which is
+    why every other netCDF-touching parallel step in this module already uses
+    ``backend="loky"`` (see ``_prepare_tiles_for_mhm``, ``_run_mhm_for_tiles``).
+    """
+    if int(n_jobs) == 1:
+        for restart_file in restart_files:
+            _mask_restart_file_in_place(restart_file, mask_var)
+        return restart_files
+    Parallel(n_jobs=n_jobs, backend="loky")(
+        delayed(_mask_restart_file_in_place)(restart_file, mask_var)
+        for restart_file in restart_files
+    )
+    return restart_files
+
+
 def _write_restart_tile_to_merged(merged, tile_dataset, global_coords):
     """Write one transformed restart tile into the final-domain dataset."""
     for var in tile_dataset.data_vars:
@@ -2307,6 +2416,13 @@ def create_mhm_restart_from_setup(  # noqa: PLR0913
         if int(result.get("status", result.get("Status", 0))) != 1
         for restart_file in result.get("restart_files", [])
     ]
+
+    if restart_files:
+        logger.info(
+            f"Masking {len(restart_files)} tile restart files with their tile "
+            "masks before moving or merging."
+        )
+        _mask_restart_files_in_place(restart_files, mask_var=mask_var, n_jobs=n_jobs)
 
     if restart_output_path is not None:
         restart_files = _move_restart_files(

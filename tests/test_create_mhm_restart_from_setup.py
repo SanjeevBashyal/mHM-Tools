@@ -1106,7 +1106,11 @@ def test_create_mhm_restart_from_setup_uses_mask_only_to_select_tiles(
     def fake_run_mhm(self, setup_path):  # noqa: ARG001
         restart_dir = Path(setup_path) / "output"
         restart_dir.mkdir(parents=True, exist_ok=True)
-        (restart_dir / "mHM_restart_001.nc").write_text("restart")
+        # Real (if minimal) NetCDF file with no ncols*/nrows* dims, so the
+        # tile-masking step opens it fine but has nothing L1-shaped to mask.
+        xr.Dataset(data_vars={"dummy": (("x",), np.array([1.0]))}).to_netcdf(
+            restart_dir / "mHM_restart_001.nc"
+        )
 
     mask_ds = xr.Dataset(
         data_vars={
@@ -1408,7 +1412,11 @@ def test_create_mhm_restart_from_setup_considers_all_positive_mask_tiles(
 
     def fake_run_mhm(self, setup_path):  # noqa: ARG001
         restart_dir = Path(setup_path) / "output"
-        (restart_dir / "mHM_restart_001.nc").write_text("restart")
+        # Real (if minimal) NetCDF file with no ncols*/nrows* dims, so the
+        # tile-masking step opens it fine but has nothing L1-shaped to mask.
+        xr.Dataset(data_vars={"dummy": (("x",), np.array([1.0]))}).to_netcdf(
+            restart_dir / "mHM_restart_001.nc"
+        )
 
     monkeypatch.setattr(
         "mhm_tools.pre.create_mhm_restart_from_setup.crop_mhm_setup",
