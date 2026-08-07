@@ -2793,7 +2793,7 @@ def _bounds_or_default(dataset, name, size, default_values):
     if default_values.shape == (size, 2):
         return default_values
     if name == "L1_SoilHorizons_bnds" and size == 6:
-        np.array(
+        return np.array(
             [
                 [0.0, 50.0],
                 [50.0, 150.0],
@@ -2820,24 +2820,24 @@ def _add_final_coords_and_bounds(ds, native, lon, lat, resolution):
     ds = ds.assign_coords(
         L1_LandCoverPeriods=(
             "L1_LandCoverPeriods",
-            _coord_or_default(native, "land_cover_period_out", period_size, [2000]),
+            _coord_or_default(native, "L1_LandCoverPeriods", period_size, [2000]),
         ),
         L1_SoilHorizons=(
             "L1_SoilHorizons",
             _coord_or_default(
-                native, "horizon_out", horizon_size, [50, 150, 300, 600, 1000, 2000]
+                native, "L1_SoilHorizons", horizon_size, [50, 150, 300, 600, 1000, 2000]
             ),
         ),
         L1_LAITimesteps=(
             "L1_LAITimesteps",
-            _coord_or_default(native, "month_of_year", lai_size, np.arange(lai_size)),
+            _coord_or_default(native, "L1_LAITimesteps", lai_size, np.arange(lai_size)),
         ),
     )
     ds["L1_LandCoverPeriods_bnds"] = (
         ("L1_LandCoverPeriods", "bnds"),
         _bounds_or_default(
             native,
-            "land_cover_period_out_bnds",
+            "L1_LandCoverPeriods_bnds",
             period_size,
             np.tile(np.array([[1900, 2099]], dtype=np.int64), (period_size, 1)),
         ),
@@ -2846,7 +2846,7 @@ def _add_final_coords_and_bounds(ds, native, lon, lat, resolution):
         ("L1_SoilHorizons", "bnds"),
         _bounds_or_default(
             native,
-            "horizon_out_bnds",
+            "L1_SoilHorizons_bnds",
             horizon_size,
             np.array(
                 [
@@ -2864,7 +2864,7 @@ def _add_final_coords_and_bounds(ds, native, lon, lat, resolution):
         ("L1_LAITimesteps", "bnds"),
         _bounds_or_default(
             native,
-            "month_of_year_bnds",
+            "L1_LAITimesteps_bnds",
             lai_size,
             np.array(
                 list(zip(range(lai_size), range(1, lai_size + 1))), dtype=np.int64

@@ -1790,19 +1790,43 @@ def test_merge_restart_files_places_tiles_from_yllcorner(tmp_path):
 
 
 def test_merge_restart_files_allows_six_soil_horizons(tmp_path):
+    """Regression test for two bugs that corrupted L1_SoilHorizons_bnds.
+
+    (1) The merge code looked up the native tile's soil-horizon coordinate
+    and bounds under invented names ("horizon_out"/"horizon_out_bnds")
+    instead of mHM's real native names ("L1_SoilHorizons"/
+    "L1_SoilHorizons_bnds", per mo_common_constants.f90's
+    soilHorizonsVarName), so it always missed the tile's real depths.
+    (2) _bounds_or_default's six-horizon default branch was missing its
+    `return`, so it always fell through to a meaningless index-based
+    fallback ([[0,1],[1,2],...]) regardless of (1). Either bug alone
+    corrupted the boundary values mHM validates against the namelist
+    config on restart, causing mHM to reject the restart file.
+    """
     restart_file = tmp_path / "slice_0_0" / "output" / "mHM_restart_001.nc"
     restart_file.parent.mkdir(parents=True)
     output_file = tmp_path / "merged.nc"
+    horizon_bounds = np.array(
+        [
+            [0.0, 50.0],
+            [50.0, 150.0],
+            [150.0, 300.0],
+            [300.0, 600.0],
+            [600.0, 1000.0],
+            [1000.0, 2000.0],
+        ]
+    )
     ds = xr.Dataset(
         data_vars={
             "L1_soilMoist": (
-                ("L1_LandCoverPeriods", "horizon_out", "ncols1", "nrows1"),
+                ("L1_LandCoverPeriods", "L1_SoilHorizons", "ncols1", "nrows1"),
                 np.ones((1, 6, 1, 1), dtype=float),
             ),
+            "L1_SoilHorizons_bnds": (("L1_SoilHorizons", "bnds"), horizon_bounds),
         },
         coords={
             "L1_LandCoverPeriods": np.array([2000]),
-            "horizon_out": np.arange(6),
+            "L1_SoilHorizons": np.array([50, 150, 300, 600, 1000, 2000]),
         },
         attrs={
             "xllcorner_L1": 0.0,
@@ -1826,6 +1850,9 @@ def test_merge_restart_files_allows_six_soil_horizons(tmp_path):
 
     assert merged.sizes["L1_SoilHorizons"] == 6
     assert merged["L1_SoilHorizons_bnds"].shape == (6, 2)
+    np.testing.assert_array_equal(
+        merged["L1_SoilHorizons_bnds"].values, horizon_bounds
+    )
     assert merged["L1_soilMoist"].dims == (
         "L1_LandCoverPeriods",
         "L1_SoilHorizons",
