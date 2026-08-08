@@ -2695,41 +2695,6 @@ def _merge_native_restart_files(restart_file_paths, lon_min, lon_max, lat_min, l
     return merged
 
 
-_FINAL_DIM_RENAMES = {
-    "land_cover_period_out": "L1_LandCoverPeriods",
-    "land_cover_period": "L1_LandCoverPeriods",
-    "L1_LandCoverPeriods": "L1_LandCoverPeriods",
-    "horizon_out": "L1_SoilHorizons",
-    "L1_SoilHorizons": "L1_SoilHorizons",
-    "month_of_year": "L1_LAITimesteps",
-    "L1_LAITimesteps": "L1_LAITimesteps",
-}
-
-_FINAL_VAR_RENAMES = {
-    "land_cover_period_out_bnds": "L1_LandCoverPeriods_bnds",
-    "horizon_out_bnds": "L1_SoilHorizons_bnds",
-    "month_of_year_bnds": "L1_LAITimesteps_bnds",
-    "L1_SealedFraction": "L1_fSealed",
-    "L1_Alpha": "L1_alpha",
-    "L1_DegDayInc": "L1_degDayInc",
-    "L1_DegDayNoPre": "L1_degDayNoPre",
-    "L1_DegDayMax": "L1_degDayMax",
-    "L1_KarstLoss": "L1_karstLoss",
-    "L1_Max_Canopy_Intercept": "L1_maxInter",
-    "L1_FastFlow": "L1_kFastFlow",
-    "L1_Kperco": "L1_kPerco",
-    "L1_SlowFlow": "L1_kSlowFlow",
-    "L1_SoilMoistureExponent": "L1_soilMoistExp",
-    "L1_FieldCap": "L1_soilMoistFC",
-    "L1_PermWiltPoint": "L1_wiltingPoint",
-    "L1_SatSoilMoisture": "L1_soilMoistSat",
-    "L1_Jarvis_Threshold": "L1_jarvis_thresh_c1",
-    "L1_TempThresh": "L1_tempThresh",
-    "L1_UnsatThreshold": "L1_unsatThresh",
-    "L1_SealedThresh": "L1_sealedThresh",
-}
-
-
 def _cell_bounds_from_centers(values, resolution):
     """Create two-column bounds from 1D cell-center coordinates."""
     values = np.asarray(values, dtype=float)
@@ -2750,7 +2715,7 @@ def _final_dim_name(dim):
         return "lon"
     if _restart_level_from_native_dim(dim, "ncols") is not None:
         return "lat"
-    return _FINAL_DIM_RENAMES.get(dim, dim)
+    return dim
 
 
 def _finalize_spatial_array(data_array, lon, lat_desc):
@@ -3086,7 +3051,7 @@ def _convert_native_restart_to_cf(
         ):
             logger.debug("Skipping unsupported final restart variable %s.", data_var)
             continue
-        final[_FINAL_VAR_RENAMES.get(data_var, data_var)] = finalized
+        final[data_var] = finalized
 
     final = _add_final_coords_and_bounds(final, native, lon, lat_desc, l1_resolution)
     active_mask = _final_mask(mask_ds, mask_var, lon, lat_desc)
