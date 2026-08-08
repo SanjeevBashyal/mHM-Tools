@@ -204,9 +204,6 @@ def _tile_has_active_mask_cell(tile, mask_da):
     """Return whether an L1 tile overlaps at least one active mask cell."""
     lon_key = get_coord_key(mask_da, lon=True)
     lat_key = get_coord_key(mask_da, lat=True)
-    # mask = mask_da.sel({lon_key: tile.lonslice, lat_key: tile.latslice})
-    # active = np.isfinite(mask) & (mask > 0)
-    # return bool(active.any())
     lon_min = min(float(tile.lonslice.start), float(tile.lonslice.stop))
     lon_max = max(float(tile.lonslice.start), float(tile.lonslice.stop))
     lat_min = min(float(tile.latslice.start), float(tile.latslice.stop))
