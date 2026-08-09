@@ -2200,7 +2200,9 @@ def _merge_native_restart_files(restart_file_paths, lon_min, lon_max, lat_min, l
             if valid is None:
                 merged[data_var][indexers] = data_array.data
             else:
-                merged[data_var][indexers] = np.where(valid, data_array.data, target.data)
+                merged[data_var][indexers] = np.where(
+                    valid, data_array.data, target.data
+                )
 
     if "L1_domain_mask" in merged:
         mask = np.asarray(merged["L1_domain_mask"].values)
@@ -2578,9 +2580,10 @@ def _convert_native_restart_to_cf(
     if "L1_degDay" not in final:
         final["L1_degDay"] = (("lat", "lon"), np.ones(active_mask.shape, dtype=float))
     if {"L1_wiltingPoint", "L1_soilMoistFC"} <= set(final.data_vars):
-        final["L1_soilMoist"] = final["L1_wiltingPoint"] + (
-            final["L1_soilMoistFC"] - final["L1_wiltingPoint"]
-        ) / 2
+        final["L1_soilMoist"] = (
+            final["L1_wiltingPoint"]
+            + (final["L1_soilMoistFC"] - final["L1_wiltingPoint"]) / 2
+        )
     final = _mask_final_spatial_vars(final, active_mask)
     return _apply_final_attrs(
         final,

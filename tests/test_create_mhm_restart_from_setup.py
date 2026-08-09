@@ -1544,7 +1544,7 @@ def test_merge_restart_files_writes_cf_lat_lon_without_flipping_native_rows(
                 ("ncols1", "nrows1"),
                 np.array([[1.0, 2.0], [3.0, 4.0]]),
             ),
-            "L1_Max_Canopy_Intercept": (
+            "L1_maxInter": (
                 ("L1_LAITimesteps", "ncols1", "nrows1"),
                 np.array([[[5.0, 6.0], [7.0, 8.0]]]),
             ),
@@ -1611,7 +1611,9 @@ def test_merge_restart_files_preserves_valid_cells_across_overlapping_tiles(tmp_
     for the border-clobbering bug in _merge_native_restart_files.
     """
     first_file = tmp_path / "000_mask_a" / "slice_0_0" / "output" / "mHM_restart_001.nc"
-    second_file = tmp_path / "001_mask_b" / "slice_0_0" / "output" / "mHM_restart_001.nc"
+    second_file = (
+        tmp_path / "001_mask_b" / "slice_0_0" / "output" / "mHM_restart_001.nc"
+    )
     first_file.parent.mkdir(parents=True)
     second_file.parent.mkdir(parents=True)
     output_file = tmp_path / "merged.nc"
@@ -1816,9 +1818,7 @@ def test_merge_restart_files_allows_six_soil_horizons(tmp_path):
 
     assert merged.sizes["L1_SoilHorizons"] == 6
     assert merged["L1_SoilHorizons_bnds"].shape == (6, 2)
-    np.testing.assert_array_equal(
-        merged["L1_SoilHorizons_bnds"].values, horizon_bounds
-    )
+    np.testing.assert_array_equal(merged["L1_SoilHorizons_bnds"].values, horizon_bounds)
     assert merged["L1_soilMoist"].dims == (
         "L1_LandCoverPeriods",
         "L1_SoilHorizons",
