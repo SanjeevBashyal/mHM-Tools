@@ -712,6 +712,7 @@ def get_dataset_from_path(
     landcover_year_start=None,
     available_mem=None,
     file_name="*.*",
+    create_bounds=False,
 ):
     """Load a dataset from a file, directory, or pattern.
 
@@ -740,6 +741,8 @@ def get_dataset_from_path(
             )
         ):
             ds_out = ds_out.sel({lat_key: slice(None, None, -1)})
+        if create_bounds:
+            ds_out = generate_bounds_for_all_coords(ds_out)
 
         logger.debug(ds_out)
         logger.debug(lat_key)
@@ -804,6 +807,7 @@ def get_dataset_from_path(
                 force_ascending_y=force_ascending_y,
                 landcover=landcover,
                 landcover_year_start=landcover_year_start,
+                create_bounds=create_bounds,
             )
         non_nc = [p for p in file_list if Path(p).suffix != ".nc"]
         if non_nc:
@@ -830,6 +834,7 @@ def get_dataset_from_path(
             force_ascending_y=force_ascending_y,
             landcover=landcover,
             landcover_year_start=landcover_year_start,
+            create_bounds=create_bounds,
         )
 
     path_str = str(path_in)
