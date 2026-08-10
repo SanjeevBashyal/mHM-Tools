@@ -254,11 +254,15 @@ def get_file_stats(
 ):
     """Get statistics for one file."""
     # logger.debug(f"Get file stats {file}")
+    lat_key = get_coord_key(ds_in, lat=True)
+    lon_key = get_coord_key(ds_in, lon=True)
+    try:
+        spatial_resolution = _spatial_resolution(ds_in, lon_key, lat_key)
+    except ValueError:
+        spatial_resolution = None
 
     # Apply coordinate slicing if needed
     logger.debug(f"before cropping the file {ds_in}")
-    lat_key = get_coord_key(ds_in, lat=True)
-    lon_key = get_coord_key(ds_in, lon=True)
     # make sure that latitude order is from highest to lowest value
     if ds_in[lat_key].shape[0] > 1 and ds_in[lat_key][1] > ds_in[lat_key][0]:
         ds_croped = ds_in.isel(lat=slice(None, None, -1))
@@ -297,7 +301,7 @@ def get_file_stats(
             "lon": get_coord_values(ds_croped, lon=True),
         },
     )
-    output = generate_bounds_for_all_coords(output)
+    output = generate_bounds_for_all_coords(output, res=spatial_resolution)
     if direct_comp:
         ts = ds_croped[input_var] * factor
         ts.name = "time_series"
@@ -516,12 +520,6 @@ def apply_spatial_mask(ds, mask_da, mask_var=None):
             catchment_mask=mask_np,
             buffer=buffer,
         )
-        lat_slice_idx = slice(
-            lat_slice_idx.start, min(lat_slice_idx.stop + 1, out[lat_key_ds].size)
-        )
-        lon_slice_idx = slice(
-            lon_slice_idx.start, min(lon_slice_idx.stop + 1, out[lon_key_ds].size)
-        )
         out = out.isel({lat_key_ds: lat_slice_idx, lon_key_ds: lon_slice_idx})
         logger.debug(
             f"After mask crop stats are all nan: "
@@ -727,11 +725,17 @@ def get_stats_one_pass(
     monthly_counts = np.where(monthly_counts > 0, monthly_counts, np.nan)
     climatology = monthly_sums / monthly_counts
     climatology = np.where(monthly_counts > 0, climatology, np.nan)
-    with get_xarray_ds_from_file(
-        files[0], engine="netcdf4", force_decending_y=True
+    with get_dataset_from_path(
+        files[0],
+        engine="netcdf4",
+        force_decending_y=True,
     ) as ds_in:
         lat_key = get_coord_key(ds_in, lat=True)
         lon_key = get_coord_key(ds_in, lon=True)
+        try:
+            spatial_resolution = _spatial_resolution(ds_in, lon_key, lat_key)
+        except ValueError:
+            spatial_resolution = None
         # Apply coordinate slicing if needed
         ds = (
             ds_in.sel(
@@ -757,7 +761,7 @@ def get_stats_one_pass(
         {"clim": clim, "std": std, "mean": mean},
         coords={"month": np.arange(1, 13, 1), "lat": lat, "lon": lon},
     )
-    output = generate_bounds_for_all_coords(output)
+    output = generate_bounds_for_all_coords(output, res=spatial_resolution)
     # Trigger computation if needed
     if output_path is not None:
         output_file = (
@@ -1710,7 +1714,7 @@ def get_stats(
         elif path.is_dir() or path.is_file():
             if path.is_file() and path.suffix == ".nc":
                 chunking = available_mem is not None
-                ds = get_xarray_ds_from_file(
+                ds = get_dataset_from_path(
                     path,
                     chunking=chunking,
                     available_mem_gib=available_mem,
@@ -1732,7 +1736,9 @@ def get_stats(
                     path, available_years=available_years, file_name=file_name
                 )
                 with get_dataset_from_path(
-                    file_list, available_mem=available_mem, file_name=file_name
+                    file_list,
+                    available_mem=available_mem,
+                    file_name=file_name,
                 ) as ds_in:
                     stats_ds = get_file_stats(
                         ds_in,
@@ -1748,8 +1754,11 @@ def get_stats(
             with ErrorLogger(logger):
                 raise ValueError(msg)
     else:
-        with get_xarray_ds_from_file(
-            path, engine="netcdf4", force_decending_y=True
+        with get_dataset_from_path(
+            path,
+            engine="netcdf4",
+            force_decending_y=True,
+            create_bounds=True,
         ) as ds_input:
             ds = ds_input
             if coordinate_slice is not None:
@@ -1767,6 +1776,13 @@ def get_stats(
                 with ErrorLogger(logger):
                     msg = "Wrong statisitcs file. If you want to create new statistics you have to provide a var."
                     raise KeyError(msg)
+
+    # get_file_stats/get_stats_one_pass already attach real bounds to their
+    # own output before returning (deriving cell width from the still-
+    # uncropped source), and the direct-open branch above opens its file
+    # with create_bounds=True — so stats_ds already carries real *_bnds
+    # coordinates by this point, and apply_spatial_mask's crop preserves
+    # them (including when it narrows an axis to a single point).
     masked_ds = apply_spatial_mask(stats_ds, mask_da, mask_var=mask_var)
     return generate_bounds_for_all_coords(masked_ds)
 
