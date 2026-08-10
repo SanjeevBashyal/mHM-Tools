@@ -3,10 +3,14 @@ import pytest
 import xarray as xr
 
 from mhm_tools.common.logger import configure_mhm_tools_logger
+from mhm_tools.common.xarray_utils import get_ds_extend
 from mhm_tools.post.gridded_data_evaluation import (
     apply_spatial_mask,
     compare_input_with_ref,
     crop_datasets_to_spatial_overlap,
+    get_file_stats,
+    get_stats,
+    get_stats_one_pass,
     infer_time_resolution_hours_from_files,
     normalize_time_axis,
     regridd_to_higher_spatial_resolution,
@@ -57,6 +61,104 @@ def _stats_dataset(lat, lon):
         },
         coords={"month": np.arange(1, 13), "lat": lat, "lon": lon},
     )
+
+
+def test_get_file_stats_generates_bounds_for_single_point_slice():
+    """A coordinate_slice narrowing to one point must not lose bound info.
+
+    Regression test: generate_bounds needs len > 1 lon/lat to derive a
+    cell width by diffing, so once coordinate_slice crops to a single
+    point, get_file_stats must derive the resolution from the still
+    multi-point ds_in itself (before cropping) and use it to build real
+    lat_bnds/lon_bnds on the output - not attempt to diff the now-single-
+    point cropped coordinates.
+    """
+    lat = np.array([2.0, 1.0, 0.0])
+    lon = np.array([0.0, 1.0, 2.0])
+    time = np.array(["2000-01-15", "2000-02-15", "2000-03-15"], dtype="datetime64[ns]")
+    data = np.ones((len(time), len(lat), len(lon)), dtype=float)
+    ds_in = xr.Dataset(
+        {"v": (("time", "lat", "lon"), data)},
+        coords={"time": time, "lat": lat, "lon": lon},
+    )
+
+    output = get_file_stats(
+        ds_in,
+        "v",
+        coordinate_slice={"lat": slice(1.0, 1.0), "lon": slice(1.0, 1.0)},
+    )
+
+    assert output.sizes["lat"] == 1
+    assert output.sizes["lon"] == 1
+    assert "spatial_resolution" not in output.attrs
+    assert "lat_bnds" in output.coords
+    assert "lon_bnds" in output.coords
+    assert output["lat"].attrs.get("bounds") == "lat_bnds"
+    assert output["lon"].attrs.get("bounds") == "lon_bnds"
+    assert np.abs(np.diff(output["lat_bnds"].values, axis=-1)) == pytest.approx(1.0)
+    assert np.abs(np.diff(output["lon_bnds"].values, axis=-1)) == pytest.approx(1.0)
+
+
+def test_get_stats_one_pass_generates_bounds_for_single_point_slice(tmp_path):
+    lat = np.array([2.0, 1.0, 0.0])
+    lon = np.array([0.0, 1.0, 2.0])
+    for month in (1, 2):
+        time = np.array([f"2000-{month:02d}-15"], dtype="datetime64[ns]")
+        data = np.ones((1, len(lat), len(lon)), dtype=float)
+        ds = xr.Dataset(
+            {"v": (("time", "lat", "lon"), data)},
+            coords={"time": time, "lat": lat, "lon": lon},
+        )
+        ds.to_netcdf(tmp_path / f"file_{month:02d}.nc")
+
+    output = get_stats_one_pass(
+        path=tmp_path,
+        var="v",
+        coordinate_slice={"lat": slice(1.0, 1.0), "lon": slice(1.0, 1.0)},
+    )
+
+    assert output.sizes["lat"] == 1
+    assert output.sizes["lon"] == 1
+    assert "spatial_resolution" not in output.attrs
+    assert "lat_bnds" in output.coords
+    assert "lon_bnds" in output.coords
+    assert output["lat"].attrs.get("bounds") == "lat_bnds"
+    assert output["lon"].attrs.get("bounds") == "lon_bnds"
+    assert np.abs(np.diff(output["lat_bnds"].values, axis=-1)) == pytest.approx(1.0)
+    assert np.abs(np.diff(output["lon_bnds"].values, axis=-1)) == pytest.approx(1.0)
+
+
+def test_get_stats_direct_open_narrows_to_single_point_without_raising(tmp_path):
+    """End-to-end: coordinate_slice narrows a pre-built stats file to one
+    point; get_ds_extend must still resolve the file's extent afterward
+    instead of raising the "no valid lon or lat coordinates" ValueError.
+    """
+    lat = np.array([2.0, 1.0, 0.0])
+    lon = np.array([0.0, 1.0, 2.0])
+    stats = _stats_dataset(lat, lon)
+    path = tmp_path / "stats.nc"
+    stats.to_netcdf(path)
+
+    output = get_stats(
+        path=path,
+        var=None,
+        factor=1,
+        coordinate_slice={"lat": slice(1.0, 1.0), "lon": slice(1.0, 1.0)},
+        n_bootstrap_years=None,
+        ncpus=1,
+        output_file=None,
+    )
+
+    assert output.sizes["lat"] == 1
+    assert output.sizes["lon"] == 1
+    assert "lat_bnds" in output.coords
+    assert "lon_bnds" in output.coords
+    assert output["lat"].attrs.get("bounds") == "lat_bnds"
+    assert output["lon"].attrs.get("bounds") == "lon_bnds"
+
+    lon_min, lon_max, lat_min, lat_max = get_ds_extend(output)
+    assert lon_min <= 1.0 <= lon_max
+    assert lat_min <= 1.0 <= lat_max
 
 
 def test_apply_spatial_mask_selects_matching_resolution_mask_variable(caplog):
