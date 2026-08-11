@@ -364,13 +364,15 @@ class MHMRunner:
             [
                 "import mhm",
                 f"mhm.model.set_verbosity(level={int(args['verbosity'])})",
-                "mhm.model.init("
-                f"namelist_mhm={json.dumps(args['namelist_mhm'])}, "
-                f"namelist_mhm_param={json.dumps(args['namelist_mhm_param'])}, "
-                f"namelist_mhm_output={json.dumps(args['namelist_mhm_output'])}, "
-                f"namelist_mrm_output={json.dumps(args['namelist_mrm_output'])}, "
-                "cwd='.'"
-                ")",
+                (
+                    "mhm.model.init("
+                    f"namelist_mhm={json.dumps(args['namelist_mhm'])}, "
+                    f"namelist_mhm_param={json.dumps(args['namelist_mhm_param'])}, "
+                    f"namelist_mhm_output={json.dumps(args['namelist_mhm_output'])}, "
+                    f"namelist_mrm_output={json.dumps(args['namelist_mrm_output'])}, "
+                    "cwd='.'"
+                    ")"
+                ),
                 "try:",
                 "    mhm.model.run()",
                 "finally:",

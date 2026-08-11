@@ -217,7 +217,7 @@ def run(args):
         lon_max_target_grid,
         lat_min_target_grid,
         lat_max_target_grid,
-        mask_da,
+        _mask_da,
     ) = get_coords(
         args.lonlatbox,
         args.mask_file,

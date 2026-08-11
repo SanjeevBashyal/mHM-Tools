@@ -65,7 +65,7 @@ def _iter_wildcard_matches(pattern):
         matches = anchor.glob(relative_pattern)
     else:
         matches = Path().glob(str(pattern))
-    return sorted(matches, key=lambda path: str(path))
+    return sorted(matches, key=str)
 
 
 def _unique_paths(paths):

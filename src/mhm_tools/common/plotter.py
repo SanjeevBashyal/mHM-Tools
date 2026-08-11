@@ -1003,9 +1003,6 @@ def plot_map(
     lat = data["lat"].values
     arr = np.squeeze(data.values)  # remove singleton dimension (e.g., time)
 
-    # Create 2D grids of lon/lat for plotting
-    lon2d, lat2d = np.meshgrid(lon, lat)
-
     # Determine color limits if not provided
     if vmin is None:
         vmin = float(np.nanmin(arr))

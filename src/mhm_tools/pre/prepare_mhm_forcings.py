@@ -168,7 +168,7 @@ def prepare_forcings(
             )
 
         # Convert units and get DataArray
-        da, encoding = convert_units(ds, var)
+        da, _encoding = convert_units(ds, var)
 
         if out_var:
             da = da.rename(out_var)
