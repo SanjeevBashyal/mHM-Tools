@@ -41,6 +41,7 @@ from mhm_tools.common.xarray_utils import (
     get_coord_key,
     get_ds_extend,
     get_overlapping_time_slice,
+    regrid_mask,
     spearman_correlation,
     timedelta_to_alias,
 )
@@ -430,8 +431,6 @@ def apply_spatial_mask(ds, mask_da, mask_var=None):
             mask_res,
             target_res,
         ) = _select_mask_for_grid(mask_da, ds, mask_var=mask_var)
-        from mhm_tools.pre.crop_mhm_setup import regrid_mask
-
         mask_on_ds = regrid_mask(
             mask_ds=mask_2d,
             lon_key_mask=lon_key_mask,
