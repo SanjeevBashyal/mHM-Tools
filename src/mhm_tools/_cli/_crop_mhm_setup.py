@@ -236,7 +236,9 @@ def run(args):
         with ErrorLogger(logger):
             raise ValueError(msg)
     lonslice = slice(lon_min_target_grid, lon_max_target_grid)
-    mask_ds = get_xarray_ds_from_file(args.mask_file)
+    mask_ds = (
+        get_xarray_ds_from_file(args.mask_file) if args.mask_file is not None else None
+    )
 
     available_mem = get_available_mem_in_unit(args.available_mem)
     logger.info(
