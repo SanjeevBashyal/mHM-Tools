@@ -16,20 +16,6 @@ from mhm_tools.post.gridded_data_evaluation import (
     regridd_to_higher_spatial_resolution,
 )
 
-# TODO: add a setup fixture to configure the logger to ERROR level to avoid cluttering test output with INFO logs also set propagate to True
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _configure_test_logging():
-    """Configure mhm_tools logging for the test session.
-
-    Sets the package logger to ERROR and enables propagation so pytest's
-    caplog captures log records without cluttering test output.
-    """
-    # Only enable propagation so pytest's caplog can capture package logs.
-    configure_mhm_tools_logger(propagate=True)
-    yield
-
 
 @pytest.fixture(autouse=True, scope="session")
 def _configure_test_logging():
