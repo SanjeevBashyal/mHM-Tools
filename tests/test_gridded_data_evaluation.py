@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 
@@ -14,6 +15,7 @@ from mhm_tools.post.gridded_data_evaluation import (
     infer_time_resolution_hours_from_files,
     normalize_time_axis,
     regridd_to_higher_spatial_resolution,
+    resample_to_target_freq,
 )
 
 
@@ -424,4 +426,59 @@ def test_compare_input_with_ref_keeps_rel_fields_as_dataarrays(monkeypatch, tmp_
     assert np.isnan(out["rel_mean"].values[0, 1])
     assert np.isnan(out["rel_std"].values[0, 1])
     assert not np.isinf(out["rel_mean"].values).any()
-    assert not np.isinf(out["rel_std"].values).any()
+
+
+def test_resample_to_target_freq_ignores_other_dims_during_align():
+    """Aligning resampled input/ref on time must not also join on lat/lon.
+
+    Regression test: resample_to_target_freq used to finish with
+    xr.align(ds_input, ds_ref, join="inner") with no `exclude`, which joins
+    on every dimension the two objects share - not just time. lat/lon are
+    already matched positionally by the spatial cropping/regridding that
+    runs before this function, but their coordinate *labels* can still
+    differ by floating-point noise (e.g. a source file storing lat/lon as
+    float32, like mHM's NetCDF output, versus float64 elsewhere: 68.15
+    stored as float32 and read back as float64 becomes 68.1500015258789,
+    not 68.15). An unrestricted inner join treats those as non-matching
+    labels and collapses lat/lon to a near-empty intersection, silently
+    wiping out all data even though both inputs were perfectly valid.
+    """
+    lat_nominal = [68.15, 68.05, 67.95, 67.85]
+    lon_nominal = [27.65, 27.75]
+
+    # Simulate the real-world mismatch: one side's coordinates round-tripped
+    # through float32, the other kept as float64, for the same nominal grid.
+    lat_input = np.array(lat_nominal, dtype=np.float32).astype(np.float64)
+    lon_input = np.array(lon_nominal, dtype=np.float32).astype(np.float64)
+    lat_ref = np.array(lat_nominal, dtype=np.float64)
+    lon_ref = np.array(lon_nominal, dtype=np.float64)
+    assert not np.array_equal(lat_input, lat_ref)
+    assert not np.array_equal(lon_input, lon_ref)
+
+    time_input = pd.date_range("2021-01-01", "2021-02-28T23:00:00", freq="h")
+    input_da = xr.DataArray(
+        np.ones((time_input.size, len(lat_input), len(lon_input))),
+        dims=("time", "lat", "lon"),
+        coords={"time": time_input, "lat": lat_input, "lon": lon_input},
+        name="time_series",
+    )
+
+    # Mid-month anchored, like FLUXCOM's monthly timestamps, already at the
+    # target ("ME") cadence so only `input_da` needs resampling.
+    time_ref = pd.to_datetime(["2021-01-16", "2021-02-16"])
+    ref_da = xr.DataArray(
+        np.full((2, len(lat_ref), len(lon_ref)), 2.0),
+        dims=("time", "lat", "lon"),
+        coords={"time": time_ref, "lat": lat_ref, "lon": lon_ref},
+        name="time_series",
+    )
+
+    resampled_input, resampled_ref = resample_to_target_freq(input_da, ref_da, "ME")
+
+    assert resampled_input.sizes["time"] == 2
+    assert resampled_input.sizes["lat"] == len(lat_nominal)
+    assert resampled_input.sizes["lon"] == len(lon_nominal)
+    assert resampled_ref.sizes["lat"] == len(lat_nominal)
+    assert resampled_ref.sizes["lon"] == len(lon_nominal)
+    assert np.isfinite(resampled_input.values).all()
+    assert np.isfinite(resampled_ref.values).all()

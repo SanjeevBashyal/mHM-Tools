@@ -943,8 +943,8 @@ def resample_to_target_freq(
     ds_input: xr.Dataset, ds_ref: xr.Dataset, target_freq
 ) -> Tuple[xr.Dataset, xr.Dataset]:
     """Resample both datasets to the provided target freq."""
-    hours_in, alias_in = timedelta_to_alias(ds_input)
-    hours_ref, alias_ref = timedelta_to_alias(ds_ref)
+    _hours_in, alias_in = timedelta_to_alias(ds_input)
+    _hours_ref, alias_ref = timedelta_to_alias(ds_ref)
 
     if target_freq != alias_ref:
         # input is coarser (e.g. monthly) → bring ref up to that
@@ -959,8 +959,9 @@ def resample_to_target_freq(
     ds_input = normalize_time_axis(ds_input, target_freq)
     ds_ref = normalize_time_axis(ds_ref, target_freq)
 
-    # finally, force them onto exactly the same time-axis
-    ds_input, ds_ref = xr.align(ds_input, ds_ref, join="inner")
+    # Align the two datasets along the time dimension ensuring that they match exactly, while ignoring any other dimensions
+    non_time_dims = (set(ds_input.dims) | set(ds_ref.dims)) - {"time"}
+    ds_input, ds_ref = xr.align(ds_input, ds_ref, join="inner", exclude=non_time_dims)
     # logger.debug(f"Input file after align {ds_input}")
     return ds_input, ds_ref
 
