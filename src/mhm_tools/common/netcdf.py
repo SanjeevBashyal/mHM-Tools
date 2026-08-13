@@ -893,3 +893,26 @@ def generate_bounds_for_all_coords(
                 f"Could not generate bounds for coordinate '{coord}'", exc_info=True
             )
     return ds_out
+
+
+def add_variable_hard_link(file_path, existing_var, alias_var):
+    """Add a second name for an existing NetCDF4 variable without duplicating its data.
+
+    Parameters
+    ----------
+    file_path : str or pathlib.Path
+        Path to an existing NetCDF4 (HDF5-backed) file, already closed for writing.
+    existing_var : str
+        Name of the variable already present in the file.
+    alias_var : str
+        New name to add; reads back identically to ``existing_var``, including all
+        of its attributes, since both names reference the same on-disk object.
+
+    Returns
+    -------
+    None
+    """
+    import h5py
+
+    with h5py.File(file_path, "r+") as f:
+        f[alias_var] = f[existing_var]

@@ -184,6 +184,60 @@ class TestCatchment(unittest.TestCase):
             output_file = self.output_path / out_var_name
             self.assertTrue(output_file.exists(), f"Failed to create {out_var_name}")
 
+    def test_write_mask_file_hard_links_land_mask_to_mask(self):
+        """land_mask and mask must be readable independently without duplicating data.
+
+        Regression test: write_mask_file used to write the same mask array
+        under both the 'land_mask' and 'mask' NetCDF variable names, which
+        are pure synonyms consumed by different downstream tools, silently
+        duplicating the mask data on disk. It should now write the array
+        once (as 'mask') and add 'land_mask' as an HDF5 hard link to that
+        same on-disk object, so both names remain fully independently
+        readable while sharing one copy of the data.
+        """
+        import h5py
+
+        c = catchment.Catchment(
+            self.ds,
+            self.var_name,
+            var="dem",
+            ftype=self.ftype,
+            transform=self.transform,
+            out_var_name=self.out_var_name,
+            latlon=self.latlon,
+        )
+        lat = np.array([2.0, 1.0, 0.0])
+        lon = np.array([0.0, 1.0])
+        basin = xr.DataArray(
+            np.array([[1, 0], [1, 1], [0, 0]]),
+            coords={"lat": lat, "lon": lon},
+            dims=["lat", "lon"],
+        )
+        fake_ds = xr.Dataset({"basin": basin}, coords={"lat": lat, "lon": lon})
+        mask_file = self.tmp_path / "mask.nc"
+
+        c.write_mask_file(fake_ds, mask_file)
+
+        # mask.nc encodes 0 as the NetCDF _FillValue (NC_ENCODE_MASK), so
+        # outside-catchment cells round-trip as NaN, not 0.
+        expected = np.where(basin.values > 0, 1.0, np.nan)
+        with get_xarray_ds_from_file(mask_file) as out:
+            self.assertIn("land_mask", out.data_vars)
+            self.assertIn("mask", out.data_vars)
+            np.testing.assert_array_equal(out["mask"].values, expected)
+            np.testing.assert_array_equal(out["land_mask"].values, out["mask"].values)
+
+        with h5py.File(mask_file, "r") as f:
+            self.assertIsInstance(f.get("land_mask", getlink=True), h5py.HardLink)
+            addr_mask = h5py.h5o.get_info(f["mask"].id).addr
+            addr_land_mask = h5py.h5o.get_info(f["land_mask"].id).addr
+            self.assertEqual(
+                addr_mask,
+                addr_land_mask,
+                "land_mask should be a hard link to the same on-disk object as "
+                "mask, not a separately stored duplicate.",
+            )
+
     def test_write_gauge_info_csv(self):
         out_dir = self.tmp_path / "gauge_csv"
         out_dir.mkdir(parents=True, exist_ok=True)

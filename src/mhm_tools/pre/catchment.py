@@ -28,7 +28,7 @@ from mhm_tools.common.file_handler import (
     write_xarray_to_file,
 )
 from mhm_tools.common.logger import ErrorLogger, log_arguments
-from mhm_tools.common.netcdf import generate_bounds
+from mhm_tools.common.netcdf import add_variable_hard_link, generate_bounds
 from mhm_tools.common.provenance import apply_output_provenance
 from mhm_tools.common.resolution_handler import Resolution
 from mhm_tools.common.utils import (
@@ -2400,7 +2400,7 @@ class Catchment:
             logger.debug(
                 f"Created mask dataarray with shape {mask_da.shape} and stats min {mask_da.min().item()}, max {mask_da.max().item()}"
             )
-            mask_ds = xr.Dataset({"land_mask": mask_da, "mask": mask_da})
+            mask_ds = xr.Dataset({"mask": mask_da})
             mask_upscaled = None
             if self.do_upscale:
                 mask_upscaled = mask_da
@@ -2433,6 +2433,9 @@ class Catchment:
                 for v in mask_ds.data_vars
             }
             write_xarray_to_file(mask_ds, mask_file, encoding=encoding)
+            add_variable_hard_link(
+                mask_file, existing_var="mask", alias_var="land_mask"
+            )
             logger.info(f"Mask file has been written to {mask_file}")
         else:
             logger.info("No mask file path specified.")
