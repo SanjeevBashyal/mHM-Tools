@@ -2389,6 +2389,14 @@ class Catchment:
                     "axis": "X",
                 }
             )
+            mask_da.attrs.update(
+                {
+                    "units": "1",
+                    "long_name": "catchment mask",
+                    "flag_values": np.array([0, 1], dtype=mask_da.dtype),
+                    "flag_meanings": "outside_catchment inside_catchment",
+                }
+            )
             logger.debug(
                 f"Created mask dataarray with shape {mask_da.shape} and stats min {mask_da.min().item()}, max {mask_da.max().item()}"
             )
@@ -2401,6 +2409,14 @@ class Catchment:
 
             if mask_upscaled is not None:
                 mask_upscaled = mask_upscaled.rename({"lat": "lat_l2", "lon": "lon_l2"})
+                mask_upscaled.attrs.update(
+                    {
+                        "units": "1",
+                        "long_name": "catchment mask at L2 resolution",
+                        "flag_values": np.array([0, 1], dtype=mask_upscaled.dtype),
+                        "flag_meanings": "outside_catchment inside_catchment",
+                    }
+                )
                 mask_ds["mask_l2"] = mask_upscaled
             dims = set(mask_ds.dims)
             all_coords = set(mask_ds.coords)
