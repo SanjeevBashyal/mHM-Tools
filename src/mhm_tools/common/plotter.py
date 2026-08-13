@@ -100,7 +100,7 @@ def plot_cdf_values(
     color: Optional[str] = None,
     linestyle="-",
     cdf_values: Optional[Sequence[float]] = None,
-    marker_size: int = 16,
+    marker_size: int = 8,
     draw_line: bool = True,
     draw_points: bool = True,
 ):
@@ -199,6 +199,7 @@ def plot_metric_cdf_comparison(
     series_count = len(values_by_label)
     tab20_colors = plt.get_cmap("tab20").colors
     continuous_cmap = plt.get_cmap("nipy_spectral")
+    series_to_draw = []
     for color_index, (label, values) in enumerate(values_by_label.items()):
         values_array = np.asarray(values, dtype=float)
         values_array = values_array[np.isfinite(values_array)]
@@ -221,12 +222,33 @@ def plot_metric_cdf_comparison(
         linestyle = "-"
         if linestyles is not None and label in linestyles:
             linestyle = linestyles[label]
-        plot_cdf_values(
+        sorted_values, cdf_values = plot_cdf_values(
             ax,
             values_array,
             label=label_with_count,
             color=color,
             linestyle=linestyle,
+            draw_line=False,
+            draw_points=True,
+        )
+        series_to_draw.append(
+            (sorted_values, cdf_values, color, linestyle, median_value)
+        )
+        plotted_any = True
+    if not plotted_any:
+        plt.close(fig)
+        msg = f"No finite values available for {variable_name}."
+        raise ValueError(msg)
+
+    # Draw every line after every point so no series' line is obscured by
+    # another series' points when many CDFs overlap (e.g. per-continent plots).
+    for sorted_values, cdf_values, color, linestyle, median_value in series_to_draw:
+        ax.plot(
+            sorted_values,
+            cdf_values,
+            color=color,
+            linestyle=linestyle,
+            linewidth=1.0,
         )
         if show_median_line:
             ax.axvline(
@@ -235,11 +257,6 @@ def plot_metric_cdf_comparison(
                 linestyle="dotted",
                 linewidth=1,
             )
-        plotted_any = True
-    if not plotted_any:
-        plt.close(fig)
-        msg = f"No finite values available for {variable_name}."
-        raise ValueError(msg)
 
     ax.set_title(title or f"CDF of {variable_name}")
     ax.set_xlabel(variable_name)
