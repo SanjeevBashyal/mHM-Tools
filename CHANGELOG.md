@@ -12,6 +12,8 @@
 - Add a `create_bounds` option to `get_dataset_from_path`, mirroring the existing option on `get_xarray_ds_from_file`, to attach real coordinate bounds to a dataset at open time, before any cropping.
 - Move `regrid_mask` from `mhm_tools.pre.crop_mhm_setup` to `mhm_tools.common.xarray_utils`, since it's pure xarray grid-matching logic already used by both pre- and post-processing modules.
 - `write_mask_file` now writes the catchment mask once (as `mask`) and adds `land_mask` as an HDF5 hard link to the same on-disk data via the new `add_variable_hard_link` helper (`mhm_tools.common.netcdf`), instead of writing the identical array twice under both names. Both variables remain fully and independently readable by any NetCDF/HDF5 tool, including all attributes, with no duplicated storage.
+- `write_metric_plots` now always writes the same per-variable/per-realisation statistics table (n, min, max, mean, median) to `metric_summary.csv` via the new `write_metric_summary_csv`, independent of which `--plot-types` were requested, so the numbers are available as a machine-readable file rather than only inside the optional overview PDF.
+- `write_metric_plots`'s `metric_plots_overview.pdf` is now written whenever there is at least one plot or summary row to show, instead of being skipped for the common case of a single variable and a single plot type; it now also embeds every plot type actually produced in that call (previously it could end up containing only catchment-map plots).
 
 ### Fixed
 
