@@ -2472,7 +2472,11 @@ def merge_catchment(path1, path2, out_path):
     ds2["basin"] = ds2["basin"] + ds1["basin"].max().item() + 1
 
     # in the border area, use the rolled data, else the original
+    var_attrs = {var: dict(ds1[var].attrs) for var in ds1.data_vars}
     merged = xr.where(mask, ds2.reindex_like(ds1, method="nearest"), ds1)
+    for var, attrs in var_attrs.items():
+        if var in merged.data_vars:
+            merged[var].attrs = attrs
     write_xarray_to_file(merged, out_path)
 
 

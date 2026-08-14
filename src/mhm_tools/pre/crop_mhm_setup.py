@@ -450,7 +450,9 @@ def crop_file(  # noqa: PLR0912 PLR0915 PLR0913
             # apply mask only to data variables that share both spatial dims
             for var in ds_cropped.data_vars:
                 if {lat_key, lon_key}.issubset(ds_cropped[var].dims):
+                    original_attrs = dict(ds_cropped[var].attrs)
                     ds_cropped[var] = ds_cropped[var].where(mask_regridded == 1, np.nan)
+                    ds_cropped[var].attrs = original_attrs
             logger.debug(f"dem ds after masking: {ds_cropped}")
         else:
             logger.info("Can't mask dem file because no mask was provided.")

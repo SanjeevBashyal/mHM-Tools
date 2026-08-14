@@ -600,7 +600,9 @@ def _mask_dem_with_l0_file(dem_file, mask_file):
     masked_vars = []
     for var in dem_ds.data_vars:
         if {dem_lat_key, dem_lon_key}.issubset(dem_ds[var].dims):
+            original_attrs = dict(dem_ds[var].attrs)
             dem_ds[var] = dem_ds[var].where(mask_regridded == 1, np.nan)
+            dem_ds[var].attrs = original_attrs
             masked_vars.append(var)
 
     if not masked_vars:
