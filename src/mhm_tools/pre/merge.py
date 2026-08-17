@@ -187,7 +187,7 @@ def merge_files(input_path, input_file_part, output, n_cpus, preserve_folders=Fa
         with ErrorLogger(logger):
             raise FileNotFoundError(msg)
     if not preserve_folders:
-        with tempfile.TemporaryDirectory(dir=out_file.parent) as tmpdir:
+        with tempfile.TemporaryDirectory(dir=output.parent) as tmpdir:
             final_merge = merge_files_from_folder(tmpdir, out_files, output, n_cpus)
         logger.info(f"Merged a total of {sum_files} to: {final_merge}")
     else:
