@@ -2501,7 +2501,7 @@ def _final_restart_encoding(ds):
             continue
         encoding[name] = {
             "dtype": "float64",
-            "_FillValue": np.nan,
+            "_FillValue": -9999.0,
             "zlib": True,
             "complevel": 4,
             "shuffle": True,

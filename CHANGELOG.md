@@ -13,6 +13,7 @@
 - Fix `merge_files`'s final merge staging its temp directory under a stale subfolder path left over from the last-processed input folder instead of the actual output directory, breaking the "same filesystem, atomic rename" assumption and risking a cross-device link error.
 - Remove intermediate per-folder merge outputs once `preserve_folders` is disabled in `merge_files`, instead of leaving redundant per-folder files and directories behind after everything has already been merged into the final output.
 - Fix stale/broken symlinks being invisible to `Path.exists()`, which crashed `merge_files`, `Grid.migrate_grid_using_systemlink`, and `link_folder_tree` with `FileExistsError` when rerun after a symlink's original target had moved or been removed.
+- Fix the final restart file written by `create-mhm-restart-from-setup` declaring `NaN` as its `_FillValue` instead of `-9999.0`, so mHM's Fortran reader (which expects `-9999.0`, matching the tile restart files read in) could no longer recognize missing cells in the merged output.
 
 ## [v0.2.2]
 
