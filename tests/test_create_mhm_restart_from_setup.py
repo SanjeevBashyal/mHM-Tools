@@ -997,8 +997,9 @@ def test_fill_recreated_restart_inputs_uses_nearest_for_meteo(tmp_path, monkeypa
     ]
     assert all(call["mask_file"] is None for call in fill_calls)
     assert all(call["mask_var"] is None for call in fill_calls)
-    assert [call["fill_value"] for call in fill_calls] == [2.2, 2.2, 2.2, 1]
-    assert all("default_value" not in call for call in fill_calls)
+    assert all("fill_value" not in call for call in fill_calls[:3])
+    assert fill_calls[3]["fill_value"] == -9999.0
+    assert [call["default_value"] for call in fill_calls] == [2.2, 2.2, 2.2, 1]
     assert (meteo_dir / "pre.nc").read_text() == "filled"
     assert soil_file.read_text() == "filled"
 
