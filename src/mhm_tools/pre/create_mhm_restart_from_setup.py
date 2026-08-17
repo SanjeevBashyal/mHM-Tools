@@ -904,7 +904,7 @@ def _fill_recreated_restart_inputs(tile, fill_nearest_files):
                 raise FileNotFoundError(msg)
         logger.info(
             f"Nearest-neighbour filling recreated meteo file {meteo_file} "
-            "without mask and fill_value=2.2."
+            "without mask and default_value=2.2."
         )
         staged_files = fill_nearest(
             input_dir=meteo_file.parent,
@@ -912,7 +912,7 @@ def _fill_recreated_restart_inputs(tile, fill_nearest_files):
             output_dir=meteo_file.parent.parent / "meteo_filled",
             mask_file=None,
             mask_var=None,
-            fill_value=2.2,
+            default_value=2.2,
         )
         for staged_file in staged_files:
             target = meteo_file.parent / staged_file.name
@@ -945,7 +945,8 @@ def _fill_recreated_restart_inputs(tile, fill_nearest_files):
                 output_dir=input_file.parent,
                 mask_file=None,
                 mask_var=None,
-                fill_value=1,
+                fill_value=-9999.0,
+                default_value=1,
             )
             logger.debug(f"Filled recreated input files: {staged_files}.")
 
