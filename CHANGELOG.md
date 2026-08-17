@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Add CF-conventions `long_name` (and `units` where derivable from the source variable) to the outputs of `calc_diff`, `calc_ratio`, and `calc_rel_diff`, and to `gridded-data-evaluation`'s climatology/std/mean/time-series outputs, instead of shipping unlabeled arrays.
+
+### Fixed
+
+- Restore variable attributes that xarray's `.where()`/arithmetic operations silently drop when masking DEM cells (`_mask_dem_with_l0_file`, `crop_file`), merging catchments (`merge_catchment`), and converting forcing units (`convert_units`), so masked/merged/unit-converted output keeps its original CF metadata.
+- Fix `_fill_recreated_restart_inputs` passing meteo/input fill values to `fill_nearest`'s `default_value` parameter as `fill_value` instead, which set the wrong NetCDF `_FillValue`/`missing_value` metadata instead of the intended out-of-domain default.
+- Fix `merge_files`'s final merge staging its temp directory under a stale subfolder path left over from the last-processed input folder instead of the actual output directory, breaking the "same filesystem, atomic rename" assumption and risking a cross-device link error.
+- Remove intermediate per-folder merge outputs once `preserve_folders` is disabled in `merge_files`, instead of leaving redundant per-folder files and directories behind after everything has already been merged into the final output.
+- Fix stale/broken symlinks being invisible to `Path.exists()`, which crashed `merge_files`, `Grid.migrate_grid_using_systemlink`, and `link_folder_tree` with `FileExistsError` when rerun after a symlink's original target had moved or been removed.
+
 ## [v0.2.2]
 
 ### Added
