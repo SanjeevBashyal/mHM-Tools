@@ -296,6 +296,7 @@ def test_create_mhm_restart_from_setup_cli_loops_masks_and_parameters(
         merged_restart_file=tmp_path / "final.nc",
         fill_nearest_files=None,
         l0_mask_files=None,
+        update_tile_masks=False,
     )
 
     run(args)

@@ -258,10 +258,12 @@ def _write_tile_mask_section(tile, mask_ds, mask_var, fname="mask_tile.nc"):
     return output_file
 
 
-def _ensure_tile_mask_section(tile, mask_ds, mask_var, fname="mask_tile.nc"):
-    """Write the tile mask section if it is not already present in the tile folder."""
+def _ensure_tile_mask_section(
+    tile, mask_ds, mask_var, fname="mask_tile.nc", update_tile_masks=False
+):
+    """Write the tile mask section if missing, or always when update_tile_masks is set."""
     mask_file = Path(tile.output_path) / fname
-    if mask_file.is_file():
+    if mask_file.is_file() and not update_tile_masks:
         return mask_file
     return _write_tile_mask_section(tile, mask_ds, mask_var, fname=fname)
 
@@ -1429,6 +1431,7 @@ def _prepare_tiles_for_mhm(  # noqa: PLR0913
     crop_n_jobs,
     fill_nearest_files,
     l0_mask_files,
+    update_tile_masks=False,
 ):
     """Prepare setup tiles unless existing tile directories should be reused."""
     missing_tiles = []
@@ -1444,7 +1447,9 @@ def _prepare_tiles_for_mhm(  # noqa: PLR0913
         )
         if not missing_tiles:
             for tile in tiles:
-                _ensure_tile_mask_section(tile, mask_ds, mask_var)
+                _ensure_tile_mask_section(
+                    tile, mask_ds, mask_var, update_tile_masks=update_tile_masks
+                )
             return tiles
         logger.info(f"Preparing {len(missing_tiles)} missing tile setups before reuse.")
         missing_output_paths = {tile.output_path for tile in missing_tiles}
@@ -1457,7 +1462,9 @@ def _prepare_tiles_for_mhm(  # noqa: PLR0913
                 "tile setups without recreating them."
             )
             for tile in existing_tiles:
-                _ensure_tile_mask_section(tile, mask_ds, mask_var)
+                _ensure_tile_mask_section(
+                    tile, mask_ds, mask_var, update_tile_masks=update_tile_masks
+                )
     else:
         missing_tiles = tiles
     if int(n_jobs) == 1:
@@ -1822,6 +1829,7 @@ def create_mhm_restart_from_setup(  # noqa: PLR0913
     skip_tile_creation=False,
     skip_mhm_run=False,
     recreate_restart=False,
+    update_tile_masks=False,
 ):
     """Create restart files from a setup by tiling, running mHM, and merging output.
 
@@ -1870,6 +1878,7 @@ def create_mhm_restart_from_setup(  # noqa: PLR0913
         crop_n_jobs=crop_n_jobs,
         fill_nearest_files=fill_nearest_files,
         l0_mask_files=l0_mask_files,
+        update_tile_masks=update_tile_masks,
     )
     if skip_mhm_run:
         logger.info(
