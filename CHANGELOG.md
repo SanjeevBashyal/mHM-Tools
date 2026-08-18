@@ -5,6 +5,7 @@
 ### Added
 
 - Add CF-conventions `long_name` (and `units` where derivable from the source variable) to the outputs of `calc_diff`, `calc_ratio`, and `calc_rel_diff`, and to `gridded-data-evaluation`'s climatology/std/mean/time-series outputs, instead of shipping unlabeled arrays.
+- Add a `--update-tile-masks` flag to `create-mhm-restart-from-setup` that rewrites each reused tile's `mask_tile.nc` from the current mask instead of keeping the existing one, so `--no-tile-creation`/`--skip-mhm-run` reruns with a changed mask no longer silently mask restart data with a stale per-tile mask.
 
 ### Fixed
 
