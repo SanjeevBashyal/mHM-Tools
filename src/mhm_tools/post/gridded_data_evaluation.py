@@ -41,6 +41,7 @@ from mhm_tools.common.xarray_utils import (
     get_coord_key,
     get_ds_extend,
     get_overlapping_time_slice,
+    normalize_lat_lon,
     regrid_mask,
     spearman_correlation,
     timedelta_to_alias,
@@ -262,16 +263,24 @@ def get_file_stats(
     except ValueError:
         spatial_resolution = None
 
+    # Normalize to canonical 'lat'/'lon' dimension names, since the statistics
+    # dataset built below always coordinates itself as 'lat'/'lon'.
+    if lat_key != "lat" and "lat" in ds_in.coords:
+        ds_in = ds_in.drop_vars("lat")
+    if lon_key != "lon" and "lon" in ds_in.coords:
+        ds_in = ds_in.drop_vars("lon")
+    ds_in = normalize_lat_lon(ds_in, lat_key=lat_key, lon_key=lon_key)
+
     # Apply coordinate slicing if needed
     logger.debug(f"before cropping the file {ds_in}")
     # make sure that latitude order is from highest to lowest value
-    if ds_in[lat_key].shape[0] > 1 and ds_in[lat_key][1] > ds_in[lat_key][0]:
+    if ds_in["lat"].shape[0] > 1 and ds_in["lat"][1] > ds_in["lat"][0]:
         ds_croped = ds_in.isel(lat=slice(None, None, -1))
     else:
         ds_croped = ds_in
     if coordinate_slice is not None:
         ds_croped = ds_croped.sel(
-            {lat_key: coordinate_slice["lat"], lon_key: coordinate_slice["lon"]}
+            {"lat": coordinate_slice["lat"], "lon": coordinate_slice["lon"]}
         )
     if avaiable_years is not None:
         ds_croped = ds_croped.sel(time=ds_croped.time.dt.year.isin(avaiable_years))
@@ -293,6 +302,17 @@ def get_file_stats(
         f"mean={bool(mean.isnull().all().compute().item())}"
     )
 
+    # Aggregation/arithmetic above drops attrs; give each output CF metadata
+    # describing the statistic, copying units from the source variable when known.
+    source_units = ds_croped[input_var].attrs.get("units")
+    clim.attrs = {"long_name": f"Monthly climatology of {input_var}"}
+    std.attrs = {"long_name": f"Temporal standard deviation of {input_var}"}
+    mean.attrs = {"long_name": f"Temporal mean of {input_var}"}
+    if source_units is not None:
+        clim.attrs["units"] = source_units
+        std.attrs["units"] = source_units
+        mean.attrs["units"] = source_units
+
     # Construct the output dataset with lazy evaluations
     output = xr.Dataset(
         {"clim": clim, "std": std, "mean": mean},
@@ -305,6 +325,7 @@ def get_file_stats(
     output = generate_bounds_for_all_coords(output, res=spatial_resolution)
     if direct_comp:
         ts = ds_croped[input_var] * factor
+        ts.attrs = dict(ds_croped[input_var].attrs)
         ts.name = "time_series"
         output = xr.merge([output, ts])
     if output_path is not None:
@@ -494,7 +515,9 @@ def apply_spatial_mask(ds, mask_da, mask_var=None):
     for var_name in out.data_vars:
         da = out[var_name]
         if lat_key_ds in da.dims and lon_key_ds in da.dims:
+            original_attrs = dict(da.attrs)
             out[var_name] = da.where(valid_mask)
+            out[var_name].attrs = original_attrs
     logger.debug(
         f"After spatial mask stats are all nan: "
         f"clim={bool(out['clim'].isnull().all().compute().item()) if 'clim' in out else None}, "
@@ -745,6 +768,7 @@ def get_stats_one_pass(
         )
         lat = get_coord_values(ds, lat=True)
         lon = get_coord_values(ds, lon=True)
+        source_units = ds[var].attrs.get("units") if var in ds else None
     # Calculate climatology and standard deviation along the time dimension
     # Construct the output dataset with lazy evaluations
     # climatology = climatology.rename({get_coord_key(climatology, lat=True): "lat", get_coord_key(climatology, lon=True): "lon"})
@@ -756,6 +780,13 @@ def get_stats_one_pass(
         dims=["month", "lat", "lon"],
     )
     mean = xr.DataArray(mean, coords={"lat": lat, "lon": lon}, dims=["lat", "lon"])
+    clim.attrs = {"long_name": f"Monthly climatology of {var}"}
+    std.attrs = {"long_name": f"Temporal standard deviation of {var}"}
+    mean.attrs = {"long_name": f"Temporal mean of {var}"}
+    if source_units is not None:
+        clim.attrs["units"] = source_units
+        std.attrs["units"] = source_units
+        mean.attrs["units"] = source_units
     output = xr.Dataset(
         {"clim": clim, "std": std, "mean": mean},
         coords={"month": np.arange(1, 13, 1), "lat": lat, "lon": lon},
@@ -2038,6 +2069,7 @@ def compare_input_with_ref(  # noqa: PLR0912, PLR0913, PLR0915
             "lon": get_coord_values(input, lon=True),
         },
         dims=["month", "lat", "lon"],
+        attrs=dict(input["clim"].attrs),
     )
     ref_clim = xr.DataArray(
         np.where(clim_valid, ref["clim"].values, np.nan),
@@ -2047,8 +2079,13 @@ def compare_input_with_ref(  # noqa: PLR0912, PLR0913, PLR0915
             "lon": get_coord_values(input, lon=True),
         },
         dims=["month", "lat", "lon"],
+        attrs=dict(ref["clim"].attrs),
     )
     rel_mean = rel_mean.where(np.isfinite(rel_mean) & (rel_mean >= 0))
+    rel_mean.attrs = {
+        "units": "1",
+        "long_name": "Relative mean (input / reference)",
+    }
     output = xr.Dataset(
         {
             "rel_mean": rel_mean,
@@ -2061,8 +2098,20 @@ def compare_input_with_ref(  # noqa: PLR0912, PLR0913, PLR0915
     )
     if with_std:
         rel_std = rel_std.where(np.isfinite(rel_std) & (rel_std >= 0))
+        rel_std.attrs = {
+            "units": "1",
+            "long_name": "Relative standard deviation (input / reference)",
+        }
         output["rel_std"] = rel_std
     if full_metrics:
+        spearman.attrs = {
+            "units": "1",
+            "long_name": "Spearman rank correlation (input vs reference)",
+        }
+        spearman_pval.attrs = {
+            "units": "1",
+            "long_name": "p-value of Spearman rank correlation (input vs reference)",
+        }
         output["spearman"] = spearman
         output["spearman_pval"] = spearman_pval
     file_name = "relative_stats"

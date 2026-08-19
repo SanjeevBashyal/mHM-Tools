@@ -87,6 +87,36 @@ def test_get_file_stats_generates_bounds_for_single_point_slice():
     assert np.abs(np.diff(output["lon_bnds"].values, axis=-1)) == pytest.approx(1.0)
 
 
+def test_get_file_stats_normalizes_latitude_longitude_dimension_names():
+    """Regression test for inputs whose real spatial dimensions are named
+    'latitude'/'longitude' (CF-compliant, as used by mHM's own pre.nc/pet.nc
+    forcing files) rather than 'lat'/'lon'.
+
+    get_file_stats used to build clim/std/mean still dimensioned by the
+    alias while attaching a separate, disconnected 'lat'/'lon' coordinate
+    built from the same values, so the resulting dataset carried an orphan
+    'lat'/'lon' unrelated to clim/std/mean's actual dimensions.
+    """
+    latitude = np.array([2.0, 1.0, 0.0])
+    longitude = np.array([0.0, 1.0, 2.0])
+    time = np.array(["2000-01-15", "2000-02-15", "2000-03-15"], dtype="datetime64[ns]")
+    data = np.ones((len(time), len(latitude), len(longitude)), dtype=float)
+    ds_in = xr.Dataset(
+        {"v": (("time", "latitude", "longitude"), data)},
+        coords={"time": time, "latitude": latitude, "longitude": longitude},
+    )
+
+    output = get_file_stats(ds_in, "v")
+
+    assert "latitude" not in output.dims
+    assert "longitude" not in output.dims
+    assert output["clim"].dims == ("month", "lat", "lon")
+    assert output["clim"].sizes["lat"] == len(latitude)
+    assert output["clim"].sizes["lon"] == len(longitude)
+    assert output.sizes["lat"] == len(latitude)
+    assert output.sizes["lon"] == len(longitude)
+
+
 def test_get_stats_one_pass_generates_bounds_for_single_point_slice(tmp_path):
     lat = np.array([2.0, 1.0, 0.0])
     lon = np.array([0.0, 1.0, 2.0])
@@ -147,6 +177,58 @@ def test_get_stats_direct_open_narrows_to_single_point_without_raising(tmp_path)
     lon_min, lon_max, lat_min, lat_max = get_ds_extend(output)
     assert lon_min <= 1.0 <= lon_max
     assert lat_min <= 1.0 <= lat_max
+
+
+def test_get_stats_masks_and_crops_latitude_longitude_input(tmp_path):
+    """End-to-end regression test for gridded-data-evaluation against mHM's
+    own pre.nc/pet.nc meteo forcing files, whose real spatial dimensions
+    are named 'latitude'/'longitude' rather than 'lat'/'lon'.
+
+    Before the fix, get_file_stats left clim/std/mean dimensioned by the
+    alias while apply_spatial_mask's masking/cropping only ever touched a
+    disconnected 'lat'/'lon' coordinate: the spatial mask silently had no
+    effect on the actual statistics, and forcing the (correctly cropped)
+    coordinate onto the (never cropped) data later crashed with
+    'xarray.core.coordinates.CoordinateValidationError: conflicting sizes
+    for dimension lat'.
+    """
+    latitude = np.array([2.0, 1.0, 0.0])
+    longitude = np.array([0.0, 1.0, 2.0])
+    time = np.array(["2000-01-15", "2000-02-15", "2000-03-15"], dtype="datetime64[ns]")
+    data = np.ones((len(time), len(latitude), len(longitude)), dtype=float)
+    ds_in = xr.Dataset(
+        {"v": (("time", "latitude", "longitude"), data)},
+        coords={"time": time, "latitude": latitude, "longitude": longitude},
+    )
+    path = tmp_path / "input.nc"
+    ds_in.to_netcdf(path)
+
+    # A basin mask file with the conventional 'lat'/'lon' naming, valid at
+    # only a single cell (lat=0.0, lon=2.0).
+    mask = np.zeros((3, 3), dtype=float)
+    mask[2, 2] = 1.0
+    mask_da = xr.DataArray(
+        mask, coords={"lat": latitude, "lon": longitude}, dims=("lat", "lon")
+    )
+
+    output = get_stats(
+        path=path,
+        var="v",
+        factor=1,
+        coordinate_slice=None,
+        n_bootstrap_years=None,
+        ncpus=1,
+        output_file=None,
+        mask_da=mask_da,
+    )
+
+    assert output.sizes["lat"] == 1
+    assert output.sizes["lon"] == 1
+    assert output["clim"].sizes["lat"] == 1
+    assert output["clim"].sizes["lon"] == 1
+    assert output["lat"].item() == pytest.approx(0.0)
+    assert output["lon"].item() == pytest.approx(2.0)
+    assert np.isfinite(output["mean"].values).all()
 
 
 def test_apply_spatial_mask_selects_matching_resolution_mask_variable(caplog):

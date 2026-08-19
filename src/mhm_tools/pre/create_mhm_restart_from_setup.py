@@ -258,10 +258,12 @@ def _write_tile_mask_section(tile, mask_ds, mask_var, fname="mask_tile.nc"):
     return output_file
 
 
-def _ensure_tile_mask_section(tile, mask_ds, mask_var, fname="mask_tile.nc"):
-    """Write the tile mask section if it is not already present in the tile folder."""
+def _ensure_tile_mask_section(
+    tile, mask_ds, mask_var, fname="mask_tile.nc", update_tile_masks=False
+):
+    """Write the tile mask section if missing, or always when update_tile_masks is set."""
     mask_file = Path(tile.output_path) / fname
-    if mask_file.is_file():
+    if mask_file.is_file() and not update_tile_masks:
         return mask_file
     return _write_tile_mask_section(tile, mask_ds, mask_var, fname=fname)
 
@@ -600,7 +602,9 @@ def _mask_dem_with_l0_file(dem_file, mask_file):
     masked_vars = []
     for var in dem_ds.data_vars:
         if {dem_lat_key, dem_lon_key}.issubset(dem_ds[var].dims):
+            original_attrs = dict(dem_ds[var].attrs)
             dem_ds[var] = dem_ds[var].where(mask_regridded == 1, np.nan)
+            dem_ds[var].attrs = original_attrs
             masked_vars.append(var)
 
     if not masked_vars:
@@ -902,7 +906,7 @@ def _fill_recreated_restart_inputs(tile, fill_nearest_files):
                 raise FileNotFoundError(msg)
         logger.info(
             f"Nearest-neighbour filling recreated meteo file {meteo_file} "
-            "without mask and fill_value=2.2."
+            "without mask and default_value=2.2."
         )
         staged_files = fill_nearest(
             input_dir=meteo_file.parent,
@@ -910,7 +914,7 @@ def _fill_recreated_restart_inputs(tile, fill_nearest_files):
             output_dir=meteo_file.parent.parent / "meteo_filled",
             mask_file=None,
             mask_var=None,
-            fill_value=2.2,
+            default_value=2.2,
         )
         for staged_file in staged_files:
             target = meteo_file.parent / staged_file.name
@@ -943,7 +947,8 @@ def _fill_recreated_restart_inputs(tile, fill_nearest_files):
                 output_dir=input_file.parent,
                 mask_file=None,
                 mask_var=None,
-                fill_value=1,
+                fill_value=-9999.0,
+                default_value=1,
             )
             logger.debug(f"Filled recreated input files: {staged_files}.")
 
@@ -1426,6 +1431,7 @@ def _prepare_tiles_for_mhm(  # noqa: PLR0913
     crop_n_jobs,
     fill_nearest_files,
     l0_mask_files,
+    update_tile_masks=False,
 ):
     """Prepare setup tiles unless existing tile directories should be reused."""
     missing_tiles = []
@@ -1441,7 +1447,9 @@ def _prepare_tiles_for_mhm(  # noqa: PLR0913
         )
         if not missing_tiles:
             for tile in tiles:
-                _ensure_tile_mask_section(tile, mask_ds, mask_var)
+                _ensure_tile_mask_section(
+                    tile, mask_ds, mask_var, update_tile_masks=update_tile_masks
+                )
             return tiles
         logger.info(f"Preparing {len(missing_tiles)} missing tile setups before reuse.")
         missing_output_paths = {tile.output_path for tile in missing_tiles}
@@ -1454,7 +1462,9 @@ def _prepare_tiles_for_mhm(  # noqa: PLR0913
                 "tile setups without recreating them."
             )
             for tile in existing_tiles:
-                _ensure_tile_mask_section(tile, mask_ds, mask_var)
+                _ensure_tile_mask_section(
+                    tile, mask_ds, mask_var, update_tile_masks=update_tile_masks
+                )
     else:
         missing_tiles = tiles
     if int(n_jobs) == 1:
@@ -1819,6 +1829,7 @@ def create_mhm_restart_from_setup(  # noqa: PLR0913
     skip_tile_creation=False,
     skip_mhm_run=False,
     recreate_restart=False,
+    update_tile_masks=False,
 ):
     """Create restart files from a setup by tiling, running mHM, and merging output.
 
@@ -1867,6 +1878,7 @@ def create_mhm_restart_from_setup(  # noqa: PLR0913
         crop_n_jobs=crop_n_jobs,
         fill_nearest_files=fill_nearest_files,
         l0_mask_files=l0_mask_files,
+        update_tile_masks=update_tile_masks,
     )
     if skip_mhm_run:
         logger.info(
@@ -2498,7 +2510,7 @@ def _final_restart_encoding(ds):
             continue
         encoding[name] = {
             "dtype": "float64",
-            "_FillValue": np.nan,
+            "_FillValue": -9999.0,
             "zlib": True,
             "complevel": 4,
             "shuffle": True,
