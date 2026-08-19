@@ -15,6 +15,7 @@
 - Remove intermediate per-folder merge outputs once `preserve_folders` is disabled in `merge_files`, instead of leaving redundant per-folder files and directories behind after everything has already been merged into the final output.
 - Fix stale/broken symlinks being invisible to `Path.exists()`, which crashed `merge_files`, `Grid.migrate_grid_using_systemlink`, and `link_folder_tree` with `FileExistsError` when rerun after a symlink's original target had moved or been removed.
 - Fix the final restart file written by `create-mhm-restart-from-setup` declaring `NaN` as its `_FillValue` instead of `-9999.0`, so mHM's Fortran reader (which expects `-9999.0`, matching the tile restart files read in) could no longer recognize missing cells in the merged output.
+- Fix `gridded-data-evaluation`'s `get_file_stats` building its climatology/std/mean output with a disconnected `lat`/`lon` coordinate whenever the input file's real spatial dimension used an alias (e.g. `northing`/`y`) instead of `lat`/`lon`: the statistics stayed keyed by the alias while a separate, unrelated `lat`/`lon` coordinate was attached alongside them, so `apply_spatial_mask` silently skipped masking/cropping the actual data (only cropping the orphan coordinate) and the mismatch later crashed with `CoordinateValidationError: conflicting sizes for dimension 'lat'`.
 
 ## [v0.2.2]
 

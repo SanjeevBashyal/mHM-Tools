@@ -41,6 +41,7 @@ from mhm_tools.common.xarray_utils import (
     get_coord_key,
     get_ds_extend,
     get_overlapping_time_slice,
+    normalize_lat_lon,
     regrid_mask,
     spearman_correlation,
     timedelta_to_alias,
@@ -262,16 +263,24 @@ def get_file_stats(
     except ValueError:
         spatial_resolution = None
 
+    # Normalize to canonical 'lat'/'lon' dimension names, since the statistics
+    # dataset built below always coordinates itself as 'lat'/'lon'.
+    if lat_key != "lat" and "lat" in ds_in.coords:
+        ds_in = ds_in.drop_vars("lat")
+    if lon_key != "lon" and "lon" in ds_in.coords:
+        ds_in = ds_in.drop_vars("lon")
+    ds_in = normalize_lat_lon(ds_in, lat_key=lat_key, lon_key=lon_key)
+
     # Apply coordinate slicing if needed
     logger.debug(f"before cropping the file {ds_in}")
     # make sure that latitude order is from highest to lowest value
-    if ds_in[lat_key].shape[0] > 1 and ds_in[lat_key][1] > ds_in[lat_key][0]:
+    if ds_in["lat"].shape[0] > 1 and ds_in["lat"][1] > ds_in["lat"][0]:
         ds_croped = ds_in.isel(lat=slice(None, None, -1))
     else:
         ds_croped = ds_in
     if coordinate_slice is not None:
         ds_croped = ds_croped.sel(
-            {lat_key: coordinate_slice["lat"], lon_key: coordinate_slice["lon"]}
+            {"lat": coordinate_slice["lat"], "lon": coordinate_slice["lon"]}
         )
     if avaiable_years is not None:
         ds_croped = ds_croped.sel(time=ds_croped.time.dt.year.isin(avaiable_years))
